@@ -1,22 +1,54 @@
-#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "archive.h"
 #include "util.h"
 
+#define OP_CREATE 	'c'
+#define OP_EXTRACT 	'x'
+#define OP_VERBOSE 	'v'
+
+#define MAGIC "EZZ"
+
+/* 
+ * EXAMPLE USAGE 
+ * ezz c Archive.EZZ Archive/
+ * ezz x Archive.EZZ
+ *
+*/
+
 int
 main (int argc, char *argv[])
 {
-	if (argc != 3)
+	if (argc <= 2) exit_with_error("Invalid arguments.");
+
+	char *op_flag = argv[1];
+	switch (*op_flag)
 	{
-		fprintf(stderr, "Invalid arguments.\n");
-		exit(EXIT_FAILURE);
+		case OP_CREATE:
+			{
+				if (argc != 4) exit_with_error("Invalid arguments.");
+				char *output_path = argv[2];
+				char *dirpath = argv[3];
+				trim(dirpath, '/');
+
+				FILE *output_file = fopen(output_path, "wb");
+				if (!output_file) exit_with_error("Couldn't open output file.");
+				fwrite(MAGIC, sizeof(char), 4, output_file);
+
+				create_archive(dirpath, output_file);
+				fclose(output_file);
+				break;
+			}
+		case OP_EXTRACT:
+			{
+				if (argc != 3) exit_with_error("Invalid arguments.");
+				char *archive_path = argv[2];
+				trim(archive_path, '/');
+
+				extract_archive(archive_path);
+				break;
+			}
+		default: exit_with_error("Unrecognized operation.");
 	}
-	char *output_path = argv[1];
-
-	char *path = argv[2];
-	if (path[strlen(path) - 1] == '/')
-		path[strlen(path) - 1] = 0;
-
-	create_archive(path, output_path);
 	return 0;
 }

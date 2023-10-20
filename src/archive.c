@@ -8,8 +8,66 @@
 #include "util.h"
 #include "types.h"
 
-#define MAGIC_STRING "EZZ"
 #define PATH_SIZE 256
+#define BUFFER_SIZE 1024*1024
+#define MAGIC_STRING "EZZ"
+
+static void
+fcopy (FILE *dest, FILE *src, unsigned long fsize)
+{
+	char buffer[BUFFER_SIZE];
+	unsigned long available_bytes, bytes_read = 0;
+	while (!feof(src) && fsize > 0)
+	{
+		available_bytes = (fsize > BUFFER_SIZE) ? BUFFER_SIZE : fsize;
+		bytes_read = fread(buffer, sizeof(char), available_bytes, src);
+		if (bytes_read == 0) exit_with_error("Failed to read src.");
+
+		fwrite(buffer, sizeof(char), bytes_read, dest);
+		fsize -= bytes_read;
+	}
+}
+
+static void
+write_entry (const char *path, FILE *output_file)
+{
+	FILE *target_file = fopen(path, "rb");
+	if (!target_file) exit_with_error("Failed to add file.");
+
+	fwrite(path, sizeof(char), PATH_SIZE, output_file);
+	printf("%s\n", path);
+
+	unsigned long fsize = get_file_size(target_file);
+	fwrite(&fsize, sizeof(unsigned long), 1, output_file);
+
+	fcopy(output_file, target_file, fsize);
+	fclose(target_file);
+}
+
+void
+create_archive (const char *basedir, FILE *output_file)
+{
+	DIR *dir = opendir(basedir);
+	if (!dir) exit_with_error("Couldn't archive directory.");
+
+	char path[PATH_SIZE];
+	struct dirent *entity;
+	while ((entity = readdir(dir)))
+	{
+		if (strcmp(entity->d_name, ".") == 0 ||
+		strcmp(entity->d_name, "..") == 0) continue;
+
+		strcpy(path, basedir);
+		strcat(path, "/");
+		strcat(path, entity->d_name);
+
+		if (entity->d_type == DT_DIR)
+			create_archive(path, output_file);
+		else
+			write_entry(path, output_file);
+	}
+	closedir(dir);
+}
 
 void
 extract_archive (const char *path)
@@ -51,71 +109,11 @@ extract_archive (const char *path)
 		}
 		printf("%s\n", entry_path);
 
-		FILE *ext_file = fopen(entry_path, "wb");
+		FILE *ext_file = fopen(entry_path, "ab");
 		if (!ext_file) exit_with_error("Couldn't extract file.");
 
-		char buffer[1024*1024];
-		while (fsize > 0)
-		{
-			unsigned long available_bytes = (fsize > sizeof(buffer)) ? sizeof(buffer) : fsize;
-			size_t bytes_read = fread(buffer, sizeof(char), available_bytes, archive);
-			if (bytes_read == 0) exit_with_error("Failed to read file.");
-
-			fwrite(buffer, sizeof(char), bytes_read, ext_file);
-			fsize -= bytes_read;
-		}
+		fcopy(ext_file, archive, fsize);
 		fclose(ext_file);
 	}
 	fclose(archive);
-}
-
-static void
-write_entry (const char *path, FILE *output_file)
-{
-	FILE *target_file = fopen(path, "rb");
-	if (!target_file) exit_with_error("Failed to add file.");
-
-	fwrite(path, sizeof(char), PATH_SIZE, output_file);
-	printf("%s\n", path);
-
-	unsigned long fsize = get_file_size(target_file);
-	fwrite(&fsize, sizeof(unsigned long), 1, output_file);
-
-	char buffer[1024*1024];
-	while (!feof(target_file) && fsize > 0)
-	{
-		unsigned long available_bytes = (fsize > sizeof(buffer)) ? sizeof(buffer) : fsize;
-		size_t bytes_read = fread(buffer, sizeof(char), available_bytes, target_file);
-		if (bytes_read == 0) exit_with_error("Failed to read file.");
-
-		fwrite(buffer, sizeof(char), bytes_read, output_file);
-		fsize -= bytes_read;
-	}
-
-	fclose(target_file);
-}
-
-void
-create_archive (const char *basedir, FILE *output_file)
-{
-	DIR *dir = opendir(basedir);
-	if (!dir) exit_with_error("Couldn't archive directory.");
-
-	char path[PATH_SIZE];
-	struct dirent *entity;
-	while ((entity = readdir(dir)))
-	{
-		if (strcmp(entity->d_name, ".") == 0 ||
-		strcmp(entity->d_name, "..") == 0) continue;
-
-		strcpy(path, basedir);
-		strcat(path, "/");
-		strcat(path, entity->d_name);
-
-		if (entity->d_type == DT_DIR)
-			create_archive(path, output_file);
-		else
-			write_entry(path, output_file);
-	}
-	closedir(dir);
 }

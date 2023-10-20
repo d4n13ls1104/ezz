@@ -26,7 +26,7 @@ get_file_size (FILE *f)
 }
 
 void
-get_base_dir (char *path)
+get_path_base (char *path)
 {
 	int i;
 	for (i = strlen(path); i > 0; i--)

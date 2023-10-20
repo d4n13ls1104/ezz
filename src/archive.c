@@ -15,7 +15,7 @@ void
 extract_archive (const char *path)
 {
 	FILE *archive = fopen(path, "rb");
-	if (!archive) exit_with_error("Failed to read archive.");
+	if (!archive) exit_with_error("Failed to open archive.");
 
 	char MAGIC[4];
 	fread(MAGIC, sizeof(char), 4, archive);
@@ -32,40 +32,36 @@ extract_archive (const char *path)
 		fread(&fsize, sizeof(unsigned long), 1, archive);
 		if (fsize == 0) break;
 
-		char base[strlen(entry_path)+1];
+		char base[strlen(entry_path) + 1];
 		strcpy(base, entry_path);
-		get_base_dir(base);
+		get_path_base(base);
 
-		char *current_dir = calloc(strlen(entry_path), sizeof(char));
-		char *ptr = strtok(base, "/");
-		while (ptr != NULL)
+		char current_dir[PATH_SIZE] = { 0 };
+		char *dptr = strtok(base, "/");
+		while (dptr)
 		{
-			strcat(current_dir, ptr);
+			strcat(current_dir, dptr);
 			strcat(current_dir, "/");
 
 			struct stat status = { 0 };
 			if (stat(current_dir, &status) == -1)
 				mkdir(current_dir, 0700);
 
-			ptr = strtok(NULL, "/");
+			dptr = strtok(NULL, "/");
 		}
-		printf("Extracting: %s | %lu BYTES\n", entry_path, fsize);
-		free(current_dir);
+		printf("%s\n", entry_path);
 
 		FILE *ext_file = fopen(entry_path, "wb");
-		if (!ext_file) exit_with_error("Failed to extract file.");
+		if (!ext_file) exit_with_error("Couldn't extract file.");
 
 		char buffer[1024*1024];
 		while (fsize > 0)
 		{
 			unsigned long available_bytes = (fsize > sizeof(buffer)) ? sizeof(buffer) : fsize;
-			size_t bytes_read = fread(buffer, 1, available_bytes, archive);
-			if (bytes_read == 0)
-			{
-				if (feof(archive)) exit_with_error("Reached end of archive.");
-				else exit_with_error("Couldn't read from archive.");
-			}
-			fwrite(buffer, bytes_read, 1, ext_file);
+			size_t bytes_read = fread(buffer, sizeof(char), available_bytes, archive);
+			if (bytes_read == 0) exit_with_error("Failed to read file.");
+
+			fwrite(buffer, sizeof(char), bytes_read, ext_file);
 			fsize -= bytes_read;
 		}
 		fclose(ext_file);
@@ -76,46 +72,43 @@ extract_archive (const char *path)
 static void
 write_entry (const char *path, FILE *output_file)
 {
-	static unsigned long total = 0; /* total bytes archived */
 	FILE *target_file = fopen(path, "rb");
-	if (!target_file) exit_with_error("Failed to open path.");
-
-	unsigned long fsize = get_file_size(target_file);
-	total += (fsize+PATH_SIZE+sizeof(unsigned long));
+	if (!target_file) exit_with_error("Failed to add file.");
 
 	fwrite(path, sizeof(char), PATH_SIZE, output_file);
-	printf("Adding: %s (%lu bytes) | Total: [%lu B]\n",
-		path, fsize, total);
+	printf("%s\n", path);
 
+	unsigned long fsize = get_file_size(target_file);
 	fwrite(&fsize, sizeof(unsigned long), 1, output_file);
 
-	/* TODO:
-	 * Make this a buffered read
-	 * */
-	char *data = malloc(fsize);
-	if (!data) exit_with_error("Not enough RAM to archive file.");
-	fread(data, sizeof(char), fsize, target_file);
+	char buffer[1024*1024];
+	while (!feof(target_file) && fsize > 0)
+	{
+		unsigned long available_bytes = (fsize > sizeof(buffer)) ? sizeof(buffer) : fsize;
+		size_t bytes_read = fread(buffer, sizeof(char), available_bytes, target_file);
+		if (bytes_read == 0) exit_with_error("Failed to read file.");
 
-	fwrite(data, sizeof(char), fsize, output_file);
+		fwrite(buffer, sizeof(char), bytes_read, output_file);
+		fsize -= bytes_read;
+	}
+
 	fclose(target_file);
-	free(data);
 }
 
 void
 create_archive (const char *basedir, FILE *output_file)
 {
 	DIR *dir = opendir(basedir);
-	if (!dir) exit_with_error("Can't archive directory.");
+	if (!dir) exit_with_error("Couldn't archive directory.");
 
 	char path[PATH_SIZE];
 	struct dirent *entity;
-	while ((entity = readdir(dir)) != NULL)
+	while ((entity = readdir(dir)))
 	{
 		if (strcmp(entity->d_name, ".") == 0 ||
 		strcmp(entity->d_name, "..") == 0) continue;
 
-		memset(path, 0, PATH_SIZE);
-		strcat(path, basedir);
+		strcpy(path, basedir);
 		strcat(path, "/");
 		strcat(path, entity->d_name);
 

@@ -1,3 +1,9 @@
+/* 
+ * EXAMPLE USAGE 
+ * ezz c Archive.EZZ Archive/
+ * ezz x Archive.EZZ
+ *
+*/
 #include <stdio.h>
 #include <string.h>
 #include "archive.h"
@@ -5,24 +11,14 @@
 
 #define OP_CREATE 	'c'
 #define OP_EXTRACT 	'x'
-#define OP_VERBOSE 	'v'
 
 #define MAGIC "EZZ"
-
-/* 
- * EXAMPLE USAGE 
- * ezz c Archive.EZZ Archive/
- * ezz x Archive.EZZ
- *
-*/
 
 int
 main (int argc, char *argv[])
 {
 	if (argc <= 2) exit_with_error("Invalid arguments.");
-
-	char *op_flag = argv[1];
-	switch (*op_flag)
+	switch (*argv[1])
 	{
 		case OP_CREATE:
 			{

@@ -16,12 +16,14 @@ static void
 fcopy (FILE *dest, FILE *src, unsigned long fsize)
 {
 	char buffer[BUFFER_SIZE];
-	unsigned long available_bytes, bytes_read = 0;
+	unsigned long available_bytes, bytes_read;
 	while (!feof(src) && fsize > 0)
 	{
-		available_bytes = (fsize > BUFFER_SIZE) ? BUFFER_SIZE : fsize;
+		available_bytes = (fsize > BUFFER_SIZE) ?
+			BUFFER_SIZE : fsize;
 		bytes_read = fread(buffer, sizeof(char), available_bytes, src);
-		if (bytes_read == 0) exit_with_error("Failed to read src.");
+		if (bytes_read == 0)
+			exit_with_error("fcopy: failed to read source.");
 
 		fwrite(buffer, sizeof(char), bytes_read, dest);
 		fsize -= bytes_read;
@@ -34,14 +36,14 @@ write_entry (const char *path, FILE *output_file)
 	FILE *target_file = fopen(path, "rb");
 	if (!target_file) exit_with_error("Failed to add file.");
 
-	fwrite(path, sizeof(char), PATH_SIZE, output_file);
-	printf("%s\n", path);
-
 	unsigned long fsize = get_file_size(target_file);
-	fwrite(&fsize, sizeof(unsigned long), 1, output_file);
+	if (fsize == 0) return;
 
+	fwrite(path, sizeof(char), PATH_SIZE, output_file);
+	fwrite(&fsize, sizeof(unsigned long), 1, output_file);
 	fcopy(output_file, target_file, fsize);
 	fclose(target_file);
+	printf("%s\n", path);
 }
 
 void
@@ -57,9 +59,10 @@ create_archive (const char *basedir, FILE *output_file)
 		if (strcmp(entity->d_name, ".") == 0 ||
 		strcmp(entity->d_name, "..") == 0) continue;
 
-		strcpy(path, basedir);
-		strcat(path, "/");
-		strcat(path, entity->d_name);
+		strncpy(path, basedir, PATH_SIZE);
+		strncat(path, "/", PATH_SIZE - strlen(path) - 1);
+		strncat(path, entity->d_name, PATH_SIZE - strlen(path) - 1);
+		path[PATH_SIZE - 1] = '\0';
 
 		if (entity->d_type == DT_DIR)
 			create_archive(path, output_file);
@@ -88,9 +91,9 @@ extract_archive (const char *path)
 
 		unsigned long fsize;
 		fread(&fsize, sizeof(unsigned long), 1, archive);
-		if (fsize == 0) break;
+		if (fsize == 0) continue;
 
-		char base[strlen(entry_path) + 1];
+		char base[PATH_SIZE];
 		strcpy(base, entry_path);
 		get_path_base(base);
 
@@ -98,8 +101,8 @@ extract_archive (const char *path)
 		char *dptr = strtok(base, "/");
 		while (dptr)
 		{
-			strcat(current_dir, dptr);
-			strcat(current_dir, "/");
+			strncat(current_dir, dptr, PATH_SIZE - strlen(current_dir) - 1);
+			strncat(current_dir, "/", PATH_SIZE - strlen(current_dir) - 1);
 
 			struct stat status = { 0 };
 			if (stat(current_dir, &status) == -1)
